@@ -1,0 +1,31 @@
+<mujoco model="4bar">
+    <compiler coordinate="local" />
+    <default>
+        <geom rgba="0.0 0.4 0.6 1"/>
+    </default>
+
+    <option gravity="1e-5 0 -9.81" integrator="RK4" timestep="0.01"/>
+
+    <asset>
+        <texture type='skybox' builtin='gradient' width='128' height='128' rgb1='0.4 0.6 0.8' rgb2='0 0 0'/>
+        <texture name="texplane" type="2d" builtin="checker" rgb1=".4 .4 .4" rgb2=".6 .6 .6" 
+            width="512" height="512"/>  
+    </asset>
+
+    <worldbody>
+        <light directional="true" diffuse=".8 .8 .8" pos="0 0 10" dir="0 0 -10"/>
+
+        <body name="body0" pos="0 0 0">
+			<geom fromto="0 0 0 0 0 0.1" name="link0" size=".01" type="capsule"/>
+			<joint axis="0 1 0" name="joint0" pos="0 0 0" type="hinge"/>
+
+			<body name="body1" pos="0 0 0.1">
+            	<geom fromto="0 0 0 0 0 0.1" name="link1"  size=".01"  type="capsule"/>
+				<joint axis="0 1 0" name="joint1" pos="0 0 0" type="hinge"/>
+
+                <body name="end0" pos="0 0 0.1">
+                </body>
+			</body>
+		</body>
+    </worldbody>
+</mujoco>
