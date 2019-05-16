@@ -174,9 +174,6 @@ void cassie_ik(double lx, double ly, double lz,
     // Floating base Jacobian
     Matrix<double, Dynamic, Dynamic, RowMajor> J_f(3, m->nv);
 
-    // Equality constraint violation Jacobian
-    Map<Matrix<double, Dynamic, Dynamic, RowMajor>> G(d->efc_J, 3 * m->neq, m->nv);
-
     // Foot desired positions
     Map<Matrix<double, Dynamic, Dynamic, RowMajor>> left_x_des(left_x, 3, 1);
     // Map<Matrix<double, Dynamic, Dynamic, RowMajor>> right_x_des(right_x, 3, 1);
@@ -190,24 +187,26 @@ void cassie_ik(double lx, double ly, double lz,
 
     Map<Matrix<double, Dynamic, Dynamic, RowMajor>> efc_J(d->efc_J, m->njmax, m->nv);
 
-    mj_kinematics(m, d);
-    mj_comPos(m, d);
-    mj_makeConstraint(m, d);
-
     //std::cout << efc_J << std::endl;
     // std::cout << G << std::endl; 
 
     // left foot IK
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < 1000; i++)
     {
         // prepare jacobians
         mj_kinematics(m, d);
         mj_comPos(m, d);
         mj_makeConstraint(m, d);
 
+        // number of joint limit and equality constraints
+        int njl_eq = d->nefc - (d->nf + d->ncon);
+
+        // Equality and joint limit constraint violation Jacobian 
+        // Equality and joint limits are consecutive in the constraint jacobian
+        Map<Matrix<double, Dynamic, Dynamic, RowMajor>> G(d->efc_J, njl_eq, m->nv);
+
         // get end effector jacobian
         mj_jacBody(m, d, J_p.data(), J_r.data(), left_foot_id);
-
 
         // Zero out jacobian columns relating to spring degrees of freedom
         // plus 2 because ball joint has 2 extra dof
@@ -240,7 +239,16 @@ void cassie_ik(double lx, double ly, double lz,
 
     }
 
-    std::cout << left_x_pos.transpose() << " | " << left_x_des.transpose() << std::endl;
+    // efc_J:
+    // neq
+    // nefc - neq
+
+    // Map<Matrix<int, Dynamic, Dynamic, RowMajor>> efc_type(d->efc_type, 1, d->nefc);
+    // std::cout << efc_type << std::endl;
+
+    //std::cout << "NEFC: " << d->nefc << std::endl << efc_J << std::endl;
+
+    std::cout << left_x_pos.transpose() << " | " << left_x_des.transpose()  << std::endl;
     // std::cin >> a;
 }
 
@@ -299,7 +307,7 @@ void ik(double x, double y, double z)
 
 void simulate(void)
 {
-    int wait_time = 100;
+    int wait_time = 1;
     while ( true )
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(wait_time));
@@ -314,7 +322,7 @@ void simulate(void)
 
         // ik(0.2, 0, 0.1);
 
-        cassie_ik(-0.02, 0.13477171, 1,
+        cassie_ik(-0.02, 0.13477171, .6,
                    0,    0,          0);
 
         mtx.unlock();
