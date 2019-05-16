@@ -105,7 +105,7 @@ void init(void)
     mj_activate(mjkey_path);
 
     char error[1000] = "";
-    m = mj_loadXML("assets/4bar.xml", NULL, error, 1000);
+    m = mj_loadXML("assets/cassie_leg_planar_fixed.xml", NULL, error, 1000);
     if ( !m )
         mju_error_s("%.1000s", error);
 
@@ -146,6 +146,104 @@ void init(void)
     glfwSetScrollCallback(window, scroll);
 }
 
+void cassie_ik(double lx, double ly, double lz,
+               double rx, double ry, double rz)
+{
+    using namespace Eigen;
+
+    mjtNum left_x[3]  = {lx, ly, lz};
+    //mjtNum right_x[3] = {rx, ry, rz};
+
+    int left_foot_id  = mj_name2id(m, mjOBJ_BODY, "left-foot");
+
+    int left_heel_spring_id = mj_name2id(m, mjOBJ_JOINT, "left-heel-spring");
+    int left_shin_id = mj_name2id(m, mjOBJ_JOINT, "left-shin");
+
+    // int right_foot_id = mj_name2id(m, mjOBJ_BODY, "right-foot");
+    // int pelvis_id = mj_name2id(m, mjOBJ_BODY, "cassie-pelvis");
+
+    // Generalized coordinate column vector
+    Map<Matrix<double, Dynamic, Dynamic, RowMajor>> q_pos(d->qpos, m->nq, 1);
+
+    // End effector position Jacobian
+    Matrix<double, Dynamic, Dynamic, RowMajor> J_p(3, m->nv);
+
+    // End effector rotation Jacobian
+    Matrix<double, Dynamic, Dynamic, RowMajor> J_r(3, m->nv);
+
+    // Floating base Jacobian
+    Matrix<double, Dynamic, Dynamic, RowMajor> J_f(3, m->nv);
+
+    // Equality constraint violation Jacobian
+    Map<Matrix<double, Dynamic, Dynamic, RowMajor>> G(d->efc_J, 3 * m->neq, m->nv);
+
+    // Foot desired positions
+    Map<Matrix<double, Dynamic, Dynamic, RowMajor>> left_x_des(left_x, 3, 1);
+    // Map<Matrix<double, Dynamic, Dynamic, RowMajor>> right_x_des(right_x, 3, 1);
+
+    // Foot positions
+    Map<Matrix<double, Dynamic, Dynamic, RowMajor>> left_x_pos(&d->xpos[3 * left_foot_id], 3, 1);
+    // Map<Matrix<double, Dynamic, Dynamic, RowMajor>> right_x_pos(&d->xpos[3 * right_foot_id], 3, 1);
+
+    // Step direction
+    Matrix<double, Dynamic, Dynamic, RowMajor> dq(m->nq, 1);
+
+    Map<Matrix<double, Dynamic, Dynamic, RowMajor>> efc_J(d->efc_J, m->njmax, m->nv);
+
+    mj_kinematics(m, d);
+    mj_comPos(m, d);
+    mj_makeConstraint(m, d);
+
+    //std::cout << efc_J << std::endl;
+    // std::cout << G << std::endl; 
+
+    // left foot IK
+    for (int i = 0; i < 100; i++)
+    {
+        // prepare jacobians
+        mj_kinematics(m, d);
+        mj_comPos(m, d);
+        mj_makeConstraint(m, d);
+
+        // get end effector jacobian
+        mj_jacBody(m, d, J_p.data(), J_r.data(), left_foot_id);
+
+
+        // Zero out jacobian columns relating to spring degrees of freedom
+        // plus 2 because ball joint has 2 extra dof
+        G.col(left_heel_spring_id + 2).setZero();
+        G.col(left_shin_id + 2).setZero();
+
+        J_p.col(left_heel_spring_id + 2).setZero();
+        J_p.col(left_shin_id + 2).setZero();
+
+        MatrixXd Ginv = G.completeOrthogonalDecomposition().pseudoInverse();
+        MatrixXd I = MatrixXd::Identity(Ginv.rows(), Ginv.rows());
+
+        // Null space projector
+        MatrixXd N = (I - G.transpose() * Ginv.transpose()).transpose();
+
+        dq = -N * J_p.transpose() * (left_x_pos - left_x_des);
+
+        // velocity might have different dimension than position due to quaternions, 
+        // so we must integrate it
+        mj_integratePos(m, q_pos.data(), dq.data(), 0.01);
+
+        // zero out floating base dof
+        //dq.block(0, 0, 7, 1) = MatrixXd::Zero(7, 1);
+
+        //mj_normalizeQuat(m, d->qpos);
+
+        // print out quaternion
+        // std::cout << dq.transpose() << std::endl;
+        // std::cout << left_shin_id << " " << left_heel_spring_id << std::endl;
+
+    }
+
+    std::cout << left_x_pos.transpose() << " | " << left_x_des.transpose() << std::endl;
+    // std::cin >> a;
+}
+
 
 void ik(double x, double y, double z)
 {
@@ -161,7 +259,8 @@ void ik(double x, double y, double z)
     Matrix<double, Dynamic, Dynamic, RowMajor> J_r(3, m->nv);
 
     // Constraint Jacobian
-    Map<Matrix<double, Dynamic, Dynamic, RowMajor>> G(d->efc_J, 3, m->nv);
+    Map<Matrix<double, Dynamic, Dynamic, RowMajor>> G(d->efc_J, m->neq * 3, m->nv);
+
     Map<Matrix<double, Dynamic, Dynamic, RowMajor>> g_err(d->efc_J, 3, 1);
 
     Map<Matrix<double, Dynamic, Dynamic, RowMajor>> x_des(point, 3, 1);
@@ -170,7 +269,6 @@ void ik(double x, double y, double z)
     Map<Matrix<double, Dynamic, Dynamic, RowMajor>> q_pos(d->qpos, m->nv, 1);
 
     Matrix<double, Dynamic, Dynamic, RowMajor> dq(1, m->nv);
-;
 
     Map<Matrix<double, Dynamic, Dynamic, RowMajor>> efc_J(d->efc_J, m->njmax, m->nv);
 
@@ -180,6 +278,10 @@ void ik(double x, double y, double z)
         mj_kinematics(m, d);
         mj_comPos(m, d);
         mj_makeConstraint(m, d);
+
+        std::cout << m->neq << std::endl;
+        int a;
+        std::cin >> a;
 
         MatrixXd Ginv = G.completeOrthogonalDecomposition().pseudoInverse();
         MatrixXd I = MatrixXd::Identity(Ginv.rows(), Ginv.rows());
@@ -197,7 +299,7 @@ void ik(double x, double y, double z)
 
 void simulate(void)
 {
-    int wait_time = 30;
+    int wait_time = 100;
     while ( true )
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(wait_time));
@@ -210,7 +312,10 @@ void simulate(void)
         // while( d->time - simstart < 1.0/60.0 )
         //     mj_step(m, d);
 
-        ik(0.2, 0, 0.1);
+        // ik(0.2, 0, 0.1);
+
+        cassie_ik(-0.02, 0.13477171, 1,
+                   0,    0,          0);
 
         mtx.unlock();
     }

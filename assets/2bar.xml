@@ -23,8 +23,6 @@
             	<geom fromto="0 0 0 0 0 0.1" name="link1"  size=".01"  type="capsule"/>
 				<joint axis="0 1 0" name="joint1" pos="0 0 0" type="hinge"/>
 
-                <body name="end0" pos="0 0 0.1">
-                </body>
 			</body>
 		</body>
     </worldbody>
